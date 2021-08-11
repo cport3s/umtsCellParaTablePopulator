@@ -7,6 +7,7 @@
     2020-11-12: CGI Calculator integration.
     2020-12-23: Fixed CGI Calculator bug. Implement new db population method. 
     2021-02-24: Include new db table parameter : siteid. Currently the script loops through aprox. 15000 cells in 13 hours.
+	2021-08-11: Fix CGI structure & start collecting PCPICH
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -14,7 +15,7 @@
 bscserverip = '172.16.121.41'
 dbuser = 'sitedb'
 dbpassword = 'BSCAltice.123'
-mccmnc = "0173f010"
+mccmnc = "06370f01"
 # ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
 def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, uracf, dlarfcnf, ularfcnf, ubandf, upscf, unodebidf, mccmnc)
     dataCounter = 0
@@ -88,6 +89,7 @@ if IsConnected(ssh) == True
             uband = []
             upsc = []
             uNodebId = []
+			uPcpich = []
             # Connect to the NE on loop
             ConnectNE(ne)
             Print(StrfTime("%Y%m%d:%H%M%S:") + 'Connected to ' + ne)
@@ -120,6 +122,7 @@ if IsConnected(ssh) == True
             end
             ClearMMLBuffer()
             for i in range(len(ucellid))
+				# Get Node B ID per cell
                 SendMML('LST UNODEB:LSTTYPE=ByNodeBName,NODEBNAME="' + unodebname[i] + '";')
                 uNodebIdParsedReport = ParseMMLRpt(GetMMLReport(0))
                 if GetNEType(ne) == 'BSC6910UMTS'
@@ -135,6 +138,15 @@ if IsConnected(ssh) == True
                 ulac[i] = ulac[i][ulacFindCharStart:ulacFindCharEnd]
                 urac[i] = urac[i][uracFindCharStart:uracFindCharEnd]
                 ClearMMLBuffer()
+				# Get PCPICH per cell
+				SendMML('LST UPCPICH:CELLID=' + ucellid[i] + ';')
+				uPcpichParsedReport = ParseMMLRpt(GetMMLReport(0))
+				if GetNEType(ne) == 'BSC6910UMTS'
+                    uPcpich.append(GetAttrValueByIdx(uPcpichParsedReport, 0, 3, 0))
+                elif GetNEType(ne) == 'BSC6900UMTS'
+                    uPcpich.append(GetAttrValueByIdx(uPcpichParsedReport, 0, 4, 0))
+                end
+				ClearMMLBuffer()
             end
             # Pass all data to the provisioning function
             Print(StrfTime("%Y%m%d:%H%M%S:") + 'Calling Provisioning Function on ' + ne)
