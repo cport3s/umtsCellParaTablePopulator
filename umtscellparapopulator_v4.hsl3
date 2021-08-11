@@ -1,0 +1,167 @@
+﻿#encoding=utf-8
+''' 2020-04-03: The script takes around 8 days to scroll through ~1700 BTS3900.
+                It's going to generate a log file each time the script starts.
+    2020-04-06: Stopped log collection. Will check to add again later on.
+    2020-04-16: Updated to read UNODEBID from RNC and include in DB
+    2020-09-07: Update Server IP Address
+    2020-11-12: CGI Calculator integration 
+    2020-12-23: Fixed CGI Calculator bug '''
+# ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
+
+# ----------------------------------------------------------VARIABLES----------------------------------------------------------#
+bscserverip = '172.16.121.41'
+dbuser = 'sitedb'
+dbpassword = 'BSCAltice.123'
+ucellid = []
+ucellname = []
+unodebname = []
+urncname = []
+ulac = []
+urac = []
+dlarfcn = []
+ularfcn = []
+uband = []
+upsc = []
+mccmnc = "0173f010"
+# ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
+def umtscellparadbupdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, uracf, dlarfcnf, ularfcnf, ubandf, upscf, unodebidf, cgi)
+    # We use REPLACE command because it acts as an INSERT when the data doesn't exists.
+    Print(StrfTime("%Y%m%d:%H%M%S:") + 'Connected! Populating Site ' + unodebnamef + ' and cell ' + ucellidf + ' UMTS info.')
+    query = "REPLACE INTO umtscellpara (`ucellid`, `ucellname`, `unodebname`, `urncname`, `ulac`, `urac`, `dlarfcn`, `ularfcn`, `uband`, `upsc`, `unodebid`, `cgi`) VALUES (" + ucellidf + ", '" + ucellnamef + "', '" + unodebnamef + "', '" + urncnamef + "', " + ulacf + ", " + uracf + ", " + dlarfcnf + ", " + ularfcnf + ", '" + ubandf + "', " + upscf + ", " + unodebidf + ", '" + cgi + "'" + ");"
+    ExecuteCmd(ssh, query)
+    Print(StrfTime("%Y%m%d:%H%M%S:") + query)
+end
+# -----------------------------------------------------------MAINCODE----------------------------------------------------------#
+# Open the connection
+ssh = OpenSSH(bscserverip, dbuser, dbpassword)
+if IsConnected(ssh) == True
+    Print(StrfTime("%Y%m%d:%H%M%S:") + 'ssh connection success')
+    # Connect to the DB
+    ExecuteCmd(ssh, 'mysql -u ' + dbuser + ' -p' + dbpassword + ' alticedr_sitedb')
+    # Get NE list by type
+    NEList = GetNELstByType('BSC6910 UMTS')
+    # Loop through the NE list
+    for ne in NEList
+        # Check if NE is online before connecting
+        if GetNEStatus(ne) == 1
+            Print(StrfTime("%Y%m%d:%H%M%S:") + ne + ' is online')
+            # Connect to the NE on loop
+            ConnectNE(ne)
+            Print(StrfTime("%Y%m%d:%H%M%S:") + 'Connected to ' + ne)
+            # List all UCELL information on the RNC
+            ClearMMLBuffer()
+            @LST UCELL:;
+            ucellreport = GetAllMMLReport()
+            # Loop through all the output reports of the LST UCELL
+            for report in ucellreport
+                ucellreportparse = ParseMMLRpt(report)
+                ucellid = GetColumnByIndex(ucellreportparse, 0, 1)
+                ucellname = GetColumnByIndex(ucellreportparse, 0, 2)
+                unodebname = GetColumnByIndex(ucellreportparse, 0, 17)
+                urncname = ne
+                ulac = GetColumnByIndex(ucellreportparse, 0, 19)
+                urac = GetColumnByIndex(ucellreportparse, 0, 22)
+                dlarfcn = GetColumnByIndex(ucellreportparse, 0, 8)
+                ularfcn = GetColumnByIndex(ucellreportparse, 0, 7)
+                uband = GetColumnByIndex(ucellreportparse, 0, 4)
+                upsc = GetColumnByIndex(ucellreportparse, 0, 14)
+            end
+            ClearMMLBuffer()
+            # Send all data to provisioning function
+            for i in range(len(ucellid))
+                SendMML('LST UNODEB:LSTTYPE=ByNodeBName,NODEBNAME="' + unodebname[i] + '";')
+                unodebidparsed = ParseMMLRpt(GetMMLReport(0))
+                unodebid = GetAttrValueByIdx(unodebidparsed, 0, 1, 0)
+                # Pass all data to the provisioning function
+                Print(StrfTime("%Y%m%d:%H%M%S:") + 'Calling Provisioning Function')
+                lactemp = ulac[i]
+                # Find the content between the parenthesis
+                lacdec = lactemp[lactemp.find('(') + 1:lactemp.find(')')]
+                ractemp = urac[i]
+                racdec = ractemp[ractemp.find('(') + 1:ractemp.find(')')]
+                lacHex = str(hex(int(lacdec)))[2:]
+                # CGI Lac must be 4 digits
+                while len(lacHex) < 4
+                    lacHex = "0" + lacHex
+                end
+                uCellIdHex = str(hex(int(ucellid[i])))[2:]
+                # CGI CI must be 4 digits
+                while len(uCellIdHex) < 4
+                     uCellIdHex = "0" + uCellIdHex
+                end
+                cgi = mccmnc + lacHex + uCellIdHex
+                umtscellparadbupdate(ucellid[i], ucellname[i], unodebname[i], urncname, lacdec, racdec, dlarfcn[i], ularfcn[i], uband[i], upsc[i], unodebid, cgi)
+            end
+        # If NE is not connected, then...
+        else
+            Print(StrfTime("%Y%m%d:%H%M%S:") + ne + " is offline")
+        end
+    # End initial FOR loop
+    end
+    NEList = GetNELstByType('BSC6900 UMTS')
+    # Loop through the NE list
+    for ne in NEList
+        # Check if NE is online before connecting
+        if GetNEStatus(ne) == 1
+            Print(StrfTime("%Y%m%d:%H%M%S:") + ne + ' is online')
+            # Connect to the NE on loop
+            ConnectNE(ne)
+            Print(StrfTime("%Y%m%d:%H%M%S:") + 'Connected to ' + ne)
+            # List all UCELL information on the RNC
+            ClearMMLBuffer()
+            @LST UCELL:;
+            ucellreport = GetAllMMLReport()
+            # Loop through all the output reports of the LST UCELL
+            for report in ucellreport
+                ucellreportparse = ParseMMLRpt(report)
+                ucellid = GetColumnByIndex(ucellreportparse, 0, 0)
+                ucellname = GetColumnByIndex(ucellreportparse, 0, 1)
+                unodebname = GetColumnByIndex(ucellreportparse, 0, 17)
+                urncname = ne
+                ulac = GetColumnByIndex(ucellreportparse, 0, 19)
+                urac = GetColumnByIndex(ucellreportparse, 0, 22)
+                dlarfcn = GetColumnByIndex(ucellreportparse, 0, 8)
+                ularfcn = GetColumnByIndex(ucellreportparse, 0, 7)
+                uband = GetColumnByIndex(ucellreportparse, 0, 4)
+                upsc = GetColumnByIndex(ucellreportparse, 0, 14)
+            end
+            ClearMMLBuffer()
+            # Send all data to provisioning function
+            for i in range(len(ucellid))
+                # Get UNODEBID
+                SendMML('LST UNODEB:LSTTYPE=ByNodeBName,NODEBNAME="' + unodebname[i] + '";')
+                unodebidparsed = ParseMMLRpt(GetMMLReport(0))
+                unodebid = GetAttrValueByIdx(unodebidparsed, 0, 0, 0)
+                # Pass all data to the provisioning function
+                Print(StrfTime("%Y%m%d:%H%M%S:") + 'Calling Provisioning Function')
+                lactemp = ulac[i]
+                # Find the content between the parenthesis
+                lacdec = lactemp[lactemp.find('(') + 1:lactemp.find(')')]
+                ractemp = urac[i]
+                racdec = ractemp[ractemp.find('(') + 1:ractemp.find(')')]
+                lacHex = str(hex(int(lacdec)))[2:]
+                # CGI Lac must be 4 digits
+                if len(lacHex) == 3
+                    lacHex = "0" + lacHex
+                end
+                uCellIdHex = str(hex(int(ucellid[i])))[2:]
+                # CGI CI must be 4 digits
+                while len(uCellIdHex) < 4
+                     uCellIdHex = "0" + uCellIdHex
+                end
+                cgi = mccmnc + lacHex + uCellIdHex
+                umtscellparadbupdate(ucellid[i], ucellname[i], unodebname[i], urncname, lacdec, racdec, dlarfcn[i], ularfcn[i], uband[i], upsc[i], unodebid, cgi)
+            end
+        # If NE is not connected, then...
+        else
+            Print(StrfTime("%Y%m%d:%H%M%S:") + ne + " is offline")
+        end
+    # End initial FOR loop
+    end
+    # Close the connection. 
+    CloseSSH(ssh)
+else
+    Print(StrfTime("%Y%m%d:%H%M%S:") + 'ssh connection failed')
+end
+Print(StrfTime("%Y%m%d:%H%M%S:") + 'ssh connection closed')
+Print("Finished!")

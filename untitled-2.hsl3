@@ -1,0 +1,19 @@
+﻿#encoding=utf-8
+ne = 'RNC_01_RRA'
+bscserverip = '172.16.121.41'
+dbuser = 'sitedb'
+dbpassword = 'BSCAltice.123'
+
+ConnectNE(ne)
+@LST UCELL:LSTTYPE=ByCellName,CELLNAME="U015S";
+reportParsed = ParseMMLRpt(GetMMLReport(0))
+cellId = GetColumnByIndex(reportParsed, 0, 0)
+file = Open('D:\\iSStar\\test.txt', 'w')
+file.write(str(cellId))
+file.close()
+
+LoginFTP(bscserverip, dbuser, dbpassword, 22, 'SFTP', 'Password')
+if GetFTPStatus() == True
+     Upload('D:\\iSStar\\test.txt', 'test_remote.txt')
+end
+LogoutFTP()
