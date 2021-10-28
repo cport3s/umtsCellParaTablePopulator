@@ -70,46 +70,54 @@ def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, ur
 end
 
 def ranIngDataUmtsCellUpdate(unodebname, band)
-	# Transform NodeB Name to NE Name & Site ID
-	uSiteId = uNodeBName[1:-1]
-	neName = "M" + uNodeBName[1:]
-	setClause = ""
-	# Remove duplicate values from band list and extract last char (band ID)
-	tmpList = []
-	for b in band
-		b = b[-1]
-		if b not in tmpList
-			tmpList.append(b)
+	tmpNodeBList = []
+	for node in unodebname
+		if node not in tmpNodeBList
+			tmpNodeBList.append(node)
 		end
 	end
-	band = tmpList
-	# Loop through the list and check for existing bands
-	for i in range(len(band))
-		if band[i] == '5'
-			setClause += "`U850` = 'U850'"
-			if i < len(band) - 1
-				setClause += ", "
-			else
-				break
+	for node in tmpNodeBList
+		# Transform NodeB Name to NE Name & Site ID
+		uSiteId = node[1:-1]
+		neName = "M" + node[1:]
+		setClause = ""
+		# Remove duplicate values from band list and extract last char (band ID)
+		tmpList = []
+		for b in band
+			b = b[-1]
+			if b not in tmpList
+				tmpList.append(b)
 			end
 		end
-		if band[i] == '8'
-			setClause += "`U900` = 'U900'"
-			if i < len(band) - 1
-				setClause += ", "
-			else
-				break
+		band = tmpList
+		# Loop through the list and check for existing bands
+		for i in range(len(band))
+			if band[i] == '5'
+				setClause += "`U850` = 'U850'"
+				if i < len(band) - 1
+					setClause += ", "
+				else
+					break
+				end
+			end
+			if band[i] == '8'
+				setClause += "`U900` = 'U900'"
+				if i < len(band) - 1
+					setClause += ", "
+				else
+					break
+				end
+			end
+			if len(band) < 1
+				setClause = "`U850` = 'N/A',`U900` = 'N/A'"
 			end
 		end
-		if len(band) < 1
-			setClause = "`U850` = 'N/A',`U900` = 'N/A'"
-		end
+		query = "UPDATE raningdata SET " + setClause + " WHERE (`Site` = '" + str(uSiteId) + "') and (`Nodo` = '" + neName + "');"
+		# Print query
+		Print(StrfTime("%Y%m%d:%H%M%S:") + query)
+		# Execute query
+		ExecuteCmd(ssh, query)
 	end
-	query = "UPDATE raningdata SET " + setClause + " WHERE (`Site` = '" + str(siteId) + "') and (`Nodo` = '" + neName + "');"
-	# Print query
-	Print(StrfTime("%Y%m%d:%H%M%S:") + query)
-	# Execute query
-	ExecuteCmd(ssh, query)
 end
 # -----------------------------------------------------------MAINCODE----------------------------------------------------------#
 # Open the connection
