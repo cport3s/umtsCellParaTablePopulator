@@ -7,7 +7,8 @@
     2020-11-12: CGI Calculator integration.
     2020-12-23: Fixed CGI Calculator bug. Implement new db population method. 
     2021-02-24: Include new db table parameter : siteid. Currently the script loops through aprox. 15000 cells in 13 hours.
-	2021-08-11: Fix CGI structure & start collecting PCPICH
+	2021-08-11: Fix CGI structure & start collecting PCPICH.
+	2021-10-27: Start collecting cell act & adm status.
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -17,9 +18,9 @@ dbuser = 'sitedb'
 dbpassword = 'BSCAltice.123'
 mccmnc = "06370f01"
 # ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
-def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, uracf, dlarfcnf, ularfcnf, ubandf, upscf, unodebidf, mccmnc, uPcpich)
+def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, uracf, dlarfcnf, ularfcnf, ubandf, upscf, unodebidf, mccmnc, uPcpich, cellAdmState, cellActState)
     dataCounter = 0
-    query = "REPLACE INTO umtscellpara (`ucellid`, `ucellname`, `unodebname`, `urncname`, `ulac`, `urac`, `dlarfcn`, `ularfcn`, `uband`, `upsc`, `unodebid`, `cgi`, `siteid`, `pcpich`) VALUES "
+    query = "REPLACE INTO umtscellpara (`ucellid`, `ucellname`, `unodebname`, `urncname`, `ulac`, `urac`, `dlarfcn`, `ularfcn`, `uband`, `upsc`, `unodebid`, `cgi`, `siteid`, `pcpich`, `celladmstate`, `cellactstate`) VALUES "
     for i in range(len(ucellidf))
         uCellId = ToString(ucellidf[i])[1]
         uCellName = ToString(ucellnamef[i])[1]
@@ -35,6 +36,8 @@ def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, ur
         lacHex = str(hex(int(uLac)))[2:]
 		pcpich = ToString(uPcpich[i])[1]
         uCellIdHex = str(hex(int(uCellId)))[2:]
+		currentCellAdmState = ToString(cellAdmState[i])[1]
+		currentCellActState = ToString(cellActState[i])[1]
         # CGI Lac must be 4 digits
         while len(lacHex) < 4
             lacHex = "0" + lacHex
@@ -46,7 +49,7 @@ def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, ur
         end
         cgi = mccmnc + lacHex + uCellIdHex
         #Print(StrfTime("%Y%m%d:%H%M%S:") + 'Populating Cell ID ' + uCellId + ' info.')
-        query += "(" + uCellId + ", '" + uCellName + "', '" + uNodeBName + "', '" + urncnamef + "', " + uLac + ", " + uRac + ", " + dlArfcn + ", " + ulArfcn + ", '" + uBand + "', " + uPSC + ", " + uNodeBId + ", '" + cgi + "', " + uSiteId + ", " + pcpich + ")"
+        query += "(" + uCellId + ", '" + uCellName + "', '" + uNodeBName + "', '" + urncnamef + "', " + uLac + ", " + uRac + ", " + dlArfcn + ", " + ulArfcn + ", '" + uBand + "', " + uPSC + ", " + uNodeBId + ", '" + cgi + "', " + uSiteId + ", " + pcpich + ", '" + currentCellAdmState + "', '" + currentCellActState + "')"
         # Increase counter with each loop
         dataCounter += 1
         # Check when you get to the last line
@@ -59,7 +62,7 @@ def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, ur
             ExecuteCmd(ssh, query)
             Print(StrfTime("%Y%m%d:%H%M%S:") + query)
             # Restart the query string
-            query = "REPLACE INTO umtscellpara (`ucellid`, `ucellname`, `unodebname`, `urncname`, `ulac`, `urac`, `dlarfcn`, `ularfcn`, `uband`, `upsc`, `unodebid`, `cgi`, `siteid`, `pcpich`) VALUES "
+            query = "REPLACE INTO umtscellpara (`ucellid`, `ucellname`, `unodebname`, `urncname`, `ulac`, `urac`, `dlarfcn`, `ularfcn`, `uband`, `upsc`, `unodebid`, `cgi`, `siteid`, `pcpich`, `celladmstate`, `cellactstate`) VALUES "
             dataCounter = 0
         end
     end
@@ -91,6 +94,8 @@ if IsConnected(ssh) == True
             upsc = []
             uNodebId = []
 			uPcpich = []
+			cellAdmState = []
+			cellActState = []
             # Connect to the NE on loop
             ConnectNE(ne)
             Print(StrfTime("%Y%m%d:%H%M%S:") + 'Connected to ' + ne)
@@ -119,6 +124,10 @@ if IsConnected(ssh) == True
                 uband = uband[0]
                 upsc.append(Sequence2List(GetColumnByName(ucellreportparse, 0, 'DL Primary Scrambling Code'))[1])
                 upsc = upsc[0]
+				cellAdmState.append(Sequence2List(GetColumnByName(ucellreportparse, 0, 'Validation indication'))[1])
+				cellAdmState = cellAdmState[0]
+				cellActState.append(Sequence2List(GetColumnByName(ucellreportparse, 0, 'Cell administrative state'))[1])
+				cellActState = cellActState[0]
                 urncname = ne
             end
             ClearMMLBuffer()
@@ -151,7 +160,7 @@ if IsConnected(ssh) == True
             end
             # Pass all data to the provisioning function
             Print(StrfTime("%Y%m%d:%H%M%S:") + 'Calling Provisioning Function on ' + ne)
-            umtsCellParaDbUpdate(ucellid, ucellname, unodebname, urncname, ulac, urac, dlarfcn, ularfcn, uband, upsc, uNodebId, mccmnc, uPcpich)
+            umtsCellParaDbUpdate(ucellid, ucellname, unodebname, urncname, ulac, urac, dlarfcn, ularfcn, uband, upsc, uNodebId, mccmnc, uPcpich, cellAdmState, cellActState)
         # If NE is not connected, then...
         else
             Print(StrfTime("%Y%m%d:%H%M%S:") + ne + " is offline")
