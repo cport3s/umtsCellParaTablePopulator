@@ -19,98 +19,37 @@ dbuser = 'sitedb'
 dbpassword = 'BSCAltice.123'
 mccmnc = "06370f01"
 # ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
-def umtsCellParaDbUpdate(ucellidf, ucellnamef, unodebnamef, urncnamef, ulacf, uracf, dlarfcnf, ularfcnf, ubandf, upscf, unodebidf, mccmnc, uPcpich, cellAdmState, cellActState)
-    dataCounter = 0
-    query = "REPLACE INTO umtscellpara (`ucellid`, `ucellname`, `unodebname`, `urncname`, `ulac`, `urac`, `dlarfcn`, `ularfcn`, `uband`, `upsc`, `unodebid`, `cgi`, `siteid`, `pcpich`, `celladmstate`, `cellactstate`) VALUES "
-    for i in range(len(ucellidf))
-        uCellId = ToString(ucellidf[i])[1]
-        uCellName = ToString(ucellnamef[i])[1]
-        uNodeBName = ToString(unodebnamef[i])[1]
-        uSiteId = uNodeBName[1:-1]
-        uLac = ToString(ulacf[i])[1]
-        uRac = ToString(uracf[i])[1]
-        dlArfcn = ToString(dlarfcnf[i])[1]
-        ulArfcn = ToString(ularfcnf[i])[1]
-        uBand = ToString(ubandf[i])[1]
-        uPSC = ToString(upscf[i])[1]
-        uNodeBId = ToString(unodebidf[i])[1]
-        lacHex = str(hex(int(uLac)))[2:]
-		pcpich = ToString(uPcpich[i])[1]
-        uCellIdHex = str(hex(int(uCellId)))[2:]
-		currentCellAdmState = ToString(cellAdmState[i])[1]
-		currentCellActState = ToString(cellActState[i])[1]
-        # CGI Lac must be 4 digits
-        while len(lacHex) < 4
-            lacHex = "0" + lacHex
-        end
-        uCellIdHex = str(hex(int(ucellidf[i])))[2:]
-        # CGI CI must be 4 digits
-        while len(uCellIdHex) < 4
-            uCellIdHex = "0" + uCellIdHex
-        end
-        cgi = mccmnc + lacHex + uCellIdHex
-        #Print(StrfTime("%Y%m%d:%H%M%S:") + 'Populating Cell ID ' + uCellId + ' info.')
-        query += "(" + uCellId + ", '" + uCellName + "', '" + uNodeBName + "', '" + urncnamef + "', " + uLac + ", " + uRac + ", " + dlArfcn + ", " + ulArfcn + ", '" + uBand + "', " + uPSC + ", " + uNodeBId + ", '" + cgi + "', " + uSiteId + ", " + pcpich + ", '" + currentCellAdmState + "', '" + currentCellActState + "')"
-        # Increase counter with each loop
-        dataCounter += 1
-        # Check when you get to the last line
-        if i < len(ucellidf) - 1 and dataCounter < 21
-            query += ", "
-        else
-            # Close the query and execute on database
-            query += ";"
-            # We use REPLACE command because it acts as an INSERT when the data doesn't exists.
-            ExecuteCmd(ssh, query)
-            Print(StrfTime("%Y%m%d:%H%M%S:") + query)
-            # Restart the query string
-            query = "REPLACE INTO umtscellpara (`ucellid`, `ucellname`, `unodebname`, `urncname`, `ulac`, `urac`, `dlarfcn`, `ularfcn`, `uband`, `upsc`, `unodebid`, `cgi`, `siteid`, `pcpich`, `celladmstate`, `cellactstate`) VALUES "
-            dataCounter = 0
-        end
-    end
-end
-
 def ranIngDataUmtsCellUpdate(unodebname, band)
-	tmpNodeBList = []
-	for node in unodebname
-		if node not in tmpNodeBList
-			tmpNodeBList.append(node)
+	tmpNodeBList = {}
+	for x in range(len(unodebname))
+		# Check if key exists in dict. If it's not there, initialize key with empty list as value.
+		if unodebname[x] not in tmpNodeBList
+			tmpNodeBList[unodebname[x]] = []
+			# Append current band (since the key is empty)
+			tmpNodeBList[unodebname[x]].append(band[x])
+		else
+			# If the key exists and the current band is not on the value list, then append
+			if band[x] not in tmpNodeBList[unodebname[x]]
+				tmpNodeBList[unodebname[x]].append(band[x])
+			end
 		end
 	end
-	for node in tmpNodeBList
-		# Transform NodeB Name to NE Name & Site ID
-		uSiteId = node[1:-1]
-		neName = "M" + node[1:]
+	for key in tmpNodeBList
 		setClause = ""
-		# Remove duplicate values from band list and extract last char (band ID)
-		tmpList = []
-		for b in band
-			b = b[-1]
-			if b not in tmpList
-				tmpList.append(b)
-			end
+		uSiteId = key[1:-1]
+		neName = "M" + key[1:]
+		# Check the key's band list
+		if 'Band5' in tmpNodeBList[key] and 'Band8' in tmpNodeBList[key]
+			setClause += "`U850` = 'U850', `U900` = 'U900'"
 		end
-		band = tmpList
-		# Loop through the list and check for existing bands
-		for i in range(len(band))
-			if band[i] == '5'
-				setClause += "`U850` = 'U850'"
-				if i < len(band) - 1
-					setClause += ", "
-				else
-					break
-				end
-			end
-			if band[i] == '8'
-				setClause += "`U900` = 'U900'"
-				if i < len(band) - 1
-					setClause += ", "
-				else
-					break
-				end
-			end
-			if len(band) < 1
-				setClause = "`U850` = 'N/A',`U900` = 'N/A'"
-			end
+		if 'Band5' in tmpNodeBList[key] and 'Band8' not in tmpNodeBList[key]
+			setClause += "`U850` = 'U850', `U900` = 'N/A'"
+		end
+		if 'Band5' not in tmpNodeBList[key] and 'Band8' in tmpNodeBList[key]
+			setClause += "`U850` = 'N/A', `U900` = 'U900'"
+		end
+		if 'Band5' not in tmpNodeBList[key] and 'Band8' not in tmpNodeBList[key]
+			setClause += "`U850` = 'N/A', `U900` = 'N/A'"
 		end
 		query = "UPDATE raningdata SET " + setClause + " WHERE (`Site` = '" + str(uSiteId) + "') and (`Nodo` = '" + neName + "');"
 		# Print query
