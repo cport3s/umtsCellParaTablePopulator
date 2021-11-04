@@ -1,15 +1,5 @@
 ﻿#encoding=utf-8
-''' 2020-04-03: The script takes around 8 days to scroll through ~1700 BTS3900.
-                It's going to generate a log file each time the script starts.
-    2020-04-06: Stopped log collection. Will check to add again later on.
-    2020-04-16: Updated to read UNODEBID from RNC and include in DB.
-    2020-09-07: Update Server IP Address.
-    2020-11-12: CGI Calculator integration.
-    2020-12-23: Fixed CGI Calculator bug. Implement new db population method. 
-    2021-02-24: Include new db table parameter : siteid. 
-				Currently the script loops through aprox. 15000 cells in 13 hours.
-	2021-08-11: Fix CGI structure & start collecting PCPICH.
-	2021-10-27: Start collecting cell act & adm status.
+''' 2021-11-03: Start update UMTS cell information on RanIngData table
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -34,6 +24,7 @@ def ranIngDataUmtsCellUpdate(unodebname, band)
 			end
 		end
 	end
+	
 	for key in tmpNodeBList
 		setClause = ""
 		uSiteId = key[1:-1]
